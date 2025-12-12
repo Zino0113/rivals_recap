@@ -5,7 +5,7 @@ import prompt_data
 import streamlit as st
 
 # [주의] 테스트용 하드코딩된 API 키입니다. 실제 배포 시에는 환경변수나 Secret으로 관리해야 합니다.
-HARDCODED_API_KEY = "AIzaSyB06QFm7fJHPvRVx4chVWVk3DSoz30D6lw"
+HARDCODED_API_KEY = "AIzaSyAQ5str37IO5oPFySN3dqHJfLW56NHCMl0"
 
 def get_gemini_response(uploaded_files, api_key=None):
     """

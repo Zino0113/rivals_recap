@@ -1,6 +1,5 @@
 # prompt_data.py
 # AI에게 보낼 시스템 프롬프트와 데이터 구조 정의
-# 이 파일만 수정하면 AI가 추출하는 데이터 형식을 변경할 수 있습니다.
 
 SYSTEM_PROMPT = """
 You are a specialized data entry clerk for the game 'Roblox Rivals'. 
@@ -15,7 +14,8 @@ Your task is to analyze game stats screenshots and extract data into a specific 
 ### Required JSON Structure:
 {
     "nickname": "String (Find user nickname from image if visible, else empty string)",
-    "playtime_hours": Float,
+    "playtime": Float,
+    "favorite_map": "String (Favorite Map)",
     "damage_dealt": Integer,
     "eliminations": Integer,
     "deaths": Integer,
@@ -26,21 +26,24 @@ Your task is to analyze game stats screenshots and extract data into a specific 
         "flawless_wins": Integer,
         "sudden_death_wins": Integer,
         "sudden_death_losses": Integer,
-        "current_streak": Integer,
-        "best_streak": Integer,
-        "streak_ended": Integer (Highest win streak ended by player)
+        "current_win_streak": Integer,
+        "best_streak": Integer (Label: highest ever win streak),
+        "streak_ended": Integer (Label: highest win streak ended)
     },
     "rounds_played": {
         "wins": Integer,
         "losses": Integer
     },
-    "ranked_duels": {
-        "wins": Integer,
-        "losses": Integer
+    "ranked_duels_played": {
+        "ranked_wins": Integer,
+        "ranked_losses": Integer
     },
-    "ranked_rounds": {
-        "wins": Integer,
-        "losses": Integer
-    }
+    "ranked_rounds_played": {
+        "ranked_wins": Integer,
+        "ranked_losses": Integer
+    },
+    "players_empowered": Integer (Label: players empowered),
+    "players_frozen": Integer (Label: players frozen),
+    "damage_absorbed": Integer (Label: damage absorbed)
 }
 """

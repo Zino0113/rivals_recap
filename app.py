@@ -9,7 +9,7 @@ from io import BytesIO
 # --- 페이지 설정 ---
 st.set_page_config(page_title="RIVALS Season 1 Recap", layout="wide", page_icon="🏆")
 
-# CSS로 스타일 좀 더 예쁘게 (선택사항)
+# CSS로 스타일 좀 더 예쁘게
 st.markdown("""
 <style>
     .stButton>button { width: 100%; border-radius: 10px; font-weight: bold; }
@@ -24,17 +24,16 @@ if 'nickname' not in st.session_state: st.session_state['nickname'] = ""
 if 'roblox_profile' not in st.session_state: st.session_state['roblox_profile'] = None
 if 'generated_card' not in st.session_state: st.session_state['generated_card'] = None
 
-# --- 사이드바 (옵션) ---
+# --- 사이드바 ---
 with st.sidebar:
     st.header("⚙️ Recap 설정")
-    # API 키 입력창은 숨겼지만, 원한다면 오버라이드 가능하게 둠
-    user_api_key = st.text_input("API Key (옵션, 미입력시 기본값)", type="password")
+    user_api_key = st.text_input("API Key (옵션)", type="password")
 
 # --- 메인 타이틀 ---
 st.markdown("<h1 style='text-align: center;'>🏆 RIVALS SEASON 1 RECAP</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>당신의 시즌 1 기록을 화려한 카드로 만들어 자랑하세요!</p>", unsafe_allow_html=True)
 
-# 탭 구성: 심플하게 2단계
+# 탭 구성
 tab1, tab2 = st.tabs(["1️⃣ 데이터 입력 & 분석", "2️⃣ 나만의 플레이어 카드"])
 
 # ==========================================
@@ -57,13 +56,11 @@ with tab1:
                 st.error("스크린샷을 업로드해주세요!")
             else:
                 with st.spinner("AI가 시즌 데이터를 분석 중입니다..."):
-                    # API 호출 (하드코딩 키 사용)
                     result = api_client.get_gemini_response(uploaded_files, user_api_key)
                     if result:
                         st.session_state['data'] = result
                         st.session_state['data']['nickname'] = st.session_state['nickname']
                         
-                        # 로블록스 프사 가져오기
                         profile = roblox_api.get_roblox_profile(st.session_state['nickname'])
                         st.session_state['roblox_profile'] = profile
                         
@@ -78,7 +75,6 @@ with tab1:
             season_score = logic.calculate_season_score(data, metrics)
             badges = logic.get_acquired_badges(data, metrics)
             
-            # 간단 요약
             st.metric("Season Score", f"{season_score:,} pts")
             st.write(f"**획득 뱃지:** {len(badges)}개")
             for b in badges[:3]:
@@ -98,7 +94,6 @@ with tab2:
     if st.session_state['data'] and st.session_state['roblox_profile']:
         st.subheader("✨ Your Season 1 Player Card")
         
-        # 데이터 준비
         data = st.session_state['data']
         metrics = logic.calculate_basic_metrics(data)
         season_score = logic.calculate_season_score(data, metrics)
@@ -106,16 +101,14 @@ with tab2:
         avatar_url = st.session_state['roblox_profile']['avatar_url']
         nickname = st.session_state['nickname']
         
-        # 카드 생성 (Pillow)
         if st.button("🎨 카드 생성하기 (새로고침)", key="gen_btn"):
             card_img = card_generator.create_player_card(nickname, avatar_url, metrics, badges, season_score)
             st.session_state['generated_card'] = card_img
         
-        # 생성된 카드 보여주기 & 다운로드
         if st.session_state['generated_card']:
-            st.image(st.session_state['generated_card'], caption="Rivals Season 1 Recap", use_column_width=True)
+            # [수정됨] use_column_width -> use_container_width
+            st.image(st.session_state['generated_card'], caption="Rivals Season 1 Recap", use_container_width=True)
             
-            # 다운로드 버튼
             buf = BytesIO()
             st.session_state['generated_card'].save(buf, format="PNG")
             byte_im = buf.getvalue()
@@ -127,7 +120,6 @@ with tab2:
                 mime="image/png"
             )
             
-        # 하단: 칭호 상세 설명
         st.markdown("---")
         st.subheader("🏅 획득한 칭호 목록")
         cols = st.columns(3)

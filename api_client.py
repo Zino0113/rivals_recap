@@ -4,35 +4,50 @@ import json
 import prompt_data
 import streamlit as st
 
-# [주의] 테스트용 하드코딩된 API 키입니다. 실제 배포 시에는 환경변수나 Secret으로 관리해야 합니다.
-HARDCODED_API_KEY = "AIzaSyAQ5str37IO5oPFySN3dqHJfLW56NHCMl0"
+# [설정] API 키 하드코딩 (배포 시 주의)
+HARDCODED_API_KEY = "AIzaSyCsUaZnEu0yQZxU69WiH4xri-oEZ-uUPX4"
 
-def get_gemini_response(uploaded_files, api_key=None):
-    """
-    Gemini 2.5 Flash 모델 호출. 
-    인자로 받은 key가 없으면 하드코딩된 key를 사용합니다.
-    """
-    # 사용자가 입력한 키가 있으면 그거 쓰고, 없으면 하드코딩 키 사용
-    final_key = api_key if api_key else HARDCODED_API_KEY
-    
-    if not final_key:
+def _configure_genai():
+    genai.configure(api_key=HARDCODED_API_KEY)
+    return genai.GenerativeModel('models/gemini-2.5-flash')
+
+def get_main_stats(rank_img, general_imgs):
+    """랭크 사진(1장) + 일반 스탯 사진(여러 장)을 통합 분석"""
+    if not rank_img and not general_imgs:
         return None
-    
-    genai.configure(api_key=final_key)
-    model = genai.GenerativeModel('models/gemini-2.5-flash')
-    
+        
+    model = _configure_genai()
     img_parts = []
-    for uploaded_file in uploaded_files:
-        img_parts.append({
-            "mime_type": uploaded_file.type,
-            "data": uploaded_file.getvalue()
-        })
     
+    # 랭크 이미지
+    if rank_img:
+        img_parts.append({"mime_type": rank_img.type, "data": rank_img.getvalue()})
+    
+    # 일반 이미지들
+    for img in general_imgs:
+        img_parts.append({"mime_type": img.type, "data": img.getvalue()})
+        
     try:
-        response = model.generate_content(img_parts + [prompt_data.SYSTEM_PROMPT])
+        response = model.generate_content(img_parts + [prompt_data.MAIN_STATS_PROMPT])
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
-        
     except Exception as e:
-        st.error(f"AI 분석 중 오류 발생: {e}")
+        st.error(f"메인 스탯 분석 오류: {e}")
+        return None
+
+def get_weapon_stats(weapon_name, weapon_img):
+    """개별 무기 스탯 이미지 분석"""
+    model = _configure_genai()
+    
+    img_part = {"mime_type": weapon_img.type, "data": weapon_img.getvalue()}
+    
+    # 무기 이름을 프롬프트에 주입
+    formatted_prompt = prompt_data.WEAPON_STATS_PROMPT.format(weapon_name=weapon_name)
+    
+    try:
+        response = model.generate_content([img_part, formatted_prompt])
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+    except Exception as e:
+        st.error(f"무기({weapon_name}) 분석 오류: {e}")
         return None

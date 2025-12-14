@@ -4,10 +4,9 @@ import requests
 from io import BytesIO
 import os
 
-def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_score):
+def create_player_card(nickname, roblox_avatar_url, metrics, badges, score, level, tier_image_name):
     """
-    플레이어 리캡 카드를 생성하여 PIL Image 객체로 반환합니다.
-    (1824x2336 해상도, 다크 네온 템플릿 bg3.png 맞춤형)
+    플레이어 리캡 카드를 생성합니다.
     """
     W, H = 1824, 2336
 
@@ -15,57 +14,52 @@ def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_scor
     base_dir = os.path.dirname(os.path.abspath(__file__))
     assets_dir = os.path.join(base_dir, "assets")
     font_dir = os.path.join(assets_dir, "font")
+    ranks_dir = os.path.join(assets_dir, "ranks") # [수정] 랭크 이미지 폴더 경로 추가
     
     # 폰트 파일 경로
     font_main_path = os.path.join(font_dir, "PartialSansKR.otf")
     font_sub_path = os.path.join(font_dir, "GowunDodum.ttf")
 
-    # 배경 이미지 로드 (bg.png 파일이 bg3 스타일이어야 함)
+    # 배경 이미지 로드
     bg_path = os.path.join(assets_dir, "bg.png")
     if os.path.exists(bg_path):
         card = Image.open(bg_path).convert("RGBA")
         card = card.resize((W, H))
     else:
-        # 배경 없으면 어두운 남색
         card = Image.new("RGBA", (W, H), (10, 15, 30))
 
     draw = ImageDraw.Draw(card)
 
-    # 폰트 로드 헬퍼
     def get_font(path, size):
         try:
             return ImageFont.truetype(path, size)
         except:
             return ImageFont.load_default()
 
-    # 텍스트 색상 (다크 모드)
+    # 색상
     COLOR_WHITE = (255, 255, 255)
-    COLOR_GRAY = (200, 200, 200) # 설명 텍스트
-    COLOR_SCORE = (255, 255, 255) # 점수
-    
-    # 폰트 사이즈 설정
+    COLOR_GRAY = (200, 200, 200)
+    COLOR_SCORE = (255, 215, 0)
+    COLOR_STROKE = (0, 0, 0)
+
+    # 폰트
     font_nick = get_font(font_main_path, 85)
-    font_score = get_font(font_main_path, 70)
+    font_level = get_font(font_main_path, 35)
+    font_score_label = get_font(font_sub_path, 45)
+    font_score_val = get_font(font_main_path, 55)
     
-    # 메인 뱃지
     font_badge_main_title = get_font(font_main_path, 65)
     font_badge_main_desc = get_font(font_sub_path, 38)
+    font_badge_sub = get_font(font_main_path, 25)
     
-    # 서브 뱃지
-    font_badge_sub = get_font(font_main_path, 35)
-    
-    # 스탯
     font_stat_val = get_font(font_main_path, 60)
     font_stat_label = get_font(font_sub_path, 40)
 
     # =================================================================
-    # [1] 상단 좌측: 원형 아바타 (Avatar)
+    # [1] 아바타
     # =================================================================
-    
-    # 배경의 원형 프레임 중심점 추정 (눈대중 보정)
-    # x=375, y=415 지점이 원의 중심
     avatar_center_x, avatar_center_y = 327, 605
-    avatar_radius = 165 # 프레임 안쪽 반지름
+    avatar_radius = 165
     avatar_size = avatar_radius * 2
 
     if roblox_avatar_url:
@@ -74,7 +68,6 @@ def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_scor
             img_raw = Image.open(BytesIO(response.content)).convert("RGBA")
             img_raw = img_raw.resize((avatar_size, avatar_size))
             
-            # 원형 마스크
             mask = Image.new("L", (avatar_size, avatar_size), 0)
             draw_mask = ImageDraw.Draw(mask)
             draw_mask.ellipse((0, 0, avatar_size, avatar_size), fill=255)
@@ -82,39 +75,100 @@ def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_scor
             avatar_circular = ImageOps.fit(img_raw, mask.size, centering=(0.5, 0.5))
             avatar_circular.putalpha(mask)
             
-            # 합성 (중심 기준 좌상단 좌표 계산)
-            paste_x = avatar_center_x - avatar_radius
-            paste_y = avatar_center_y - avatar_radius
-            card.paste(avatar_circular, (paste_x, paste_y), avatar_circular)
+            card.paste(avatar_circular, (avatar_center_x - avatar_radius, avatar_center_y - avatar_radius), avatar_circular)
         except:
             pass
 
     # =================================================================
-    # [2] 상단 우측: 닉네임 & 점수 (Nickname & Score)
+    # [2] 닉네임 & 레벨(Star)
     # =================================================================
-    
-    # 닉네임 위치 (원 우측 상단)
     nick_x = 650
     nick_y = 500
-    draw.text((nick_x, nick_y), nickname, font=font_nick, fill=COLOR_WHITE)
-
-    # 시즌 점수 (닉네임 아래)
-    score_text = f"💎 {season_score:,}"
-    draw.text((nick_x + 50, nick_y + 150), score_text, font=font_score, fill=COLOR_SCORE)
-
-
-    # =================================================================
-    # [3] 중단: 메인 하이라이트 (Main Badge)
-    # =================================================================
     
-    # 긴 직사각형 박스 영역 (약 y=690 ~ 1070)
+    # 닉네임
+    draw.text((nick_x, nick_y), nickname, font=font_nick, fill=COLOR_WHITE, stroke_width=6, stroke_fill=COLOR_STROKE)
+    
+    # 닉네임 길이 계산
+    nick_bbox = draw.textbbox((0, 0), nickname, font=font_nick)
+    nick_w = nick_bbox[2] - nick_bbox[0]
+    
+    # 별 아이콘 + 레벨
+    star_path = os.path.join(assets_dir, "star.png")
+    star_size = 80
+    star_x = nick_x + nick_w + 30
+    star_y = nick_y + 10
+
+    if os.path.exists(star_path):
+        try:
+            star_img = Image.open(star_path).convert("RGBA")
+            star_img = star_img.resize((star_size, star_size))
+            card.paste(star_img, (int(star_x), int(star_y)), star_img)
+            
+            # 레벨 숫자
+            level_str = str(level)
+            lv_bbox = draw.textbbox((0, 0), level_str, font=font_level)
+            lv_w = lv_bbox[2] - lv_bbox[0]
+            lv_h = lv_bbox[3] - lv_bbox[1]
+            
+            star_center_x = star_x + (star_size / 2)
+            star_center_y = star_y + (star_size / 2)
+            
+            draw.text((star_center_x - (lv_w / 2), star_center_y - (lv_h / 2) - 5), level_str, font=font_level, fill=COLOR_WHITE, stroke_width=2, stroke_fill=COLOR_STROKE)
+            
+        except Exception as e:
+            pass
+
+    # =================================================================
+    # [3] 점수 영역 (2줄: 최종 / 최고)
+    # =================================================================
+    score_start_x = nick_x
+    score_start_y = nick_y + 140
+    line_gap = 80
+    
+    # [수정] 티어 아이콘 로드 (ranks 폴더에서 로드)
+    # tier_image_name은 logic.py에서 "g3.webp" 등으로 옴
+    tier_path = os.path.join(ranks_dir, tier_image_name) 
+    
+    tier_img = None
+    if os.path.exists(tier_path):
+        try:
+            t_img = Image.open(tier_path).convert("RGBA")
+            tier_img = t_img.resize((70, 70))
+        except: 
+            print(f"티어 이미지 로드 실패: {tier_path}")
+    else:
+        print(f"티어 이미지를 찾을 수 없음: {tier_path}")
+
+    def draw_score_line(y, label, val):
+        draw.text((score_start_x, y), label, font=font_score_label, fill=COLOR_GRAY)
+        l_bbox = draw.textbbox((0, 0), label, font=font_score_label)
+        l_w = l_bbox[2] - l_bbox[0]
+        
+        icon_x = score_start_x + l_w
+        val_x = icon_x + 20
+        
+        if tier_img:
+            card.paste(tier_img, (int(icon_x), int(y - 5)), tier_img)
+            val_x += 60
+        else:
+            # 이미지 없으면 다이아 이모지
+            draw.text((icon_x, y), "💎", font=font_score_val, fill=COLOR_WHITE)
+            val_x += 50
+            
+        draw.text((val_x, y), f"{val:,} 점", font=font_score_val, fill=COLOR_SCORE)
+
+    draw_score_line(score_start_y, "최종 점수 : ", score)
+    draw_score_line(score_start_y + line_gap, "최고 점수 : ", score)
+
+
+    # =================================================================
+    # [4] 메인 뱃지
+    # =================================================================
     main_box_x = 140
     main_box_y = 950 
     
     if badges:
-        main_badge = badges[0] # 1순위 뱃지
-        
-        # (1) 뱃지 이미지 (박스 좌측)
+        main_badge = badges[0]
         b_path = main_badge.get('image', '')
         b_abs_path = os.path.join(base_dir, b_path) if b_path else ""
         
@@ -124,91 +178,49 @@ def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_scor
                 b_img = Image.open(b_abs_path).convert("RGBA")
                 b_img = b_img.resize((img_size, img_size))
                 card.paste(b_img, (main_box_x + 40, main_box_y), b_img)
-            except:
-                pass
-        else:
-            # 이미지 없을 때 디버깅용 박스 (실제론 안 그림)
-            # draw.rectangle([main_box_x + 40, main_box_y, main_box_x + 40 + img_size, main_box_y + img_size], outline="white")
-            pass
+            except: pass
         
-        # (2) 텍스트 (이미지 우측)
-        text_x = main_box_x + 380
+        text_x = main_box_x + 470
         text_y = main_box_y + 20
-        
         draw.text((text_x, text_y), main_badge['name'], font=font_badge_main_title, fill=COLOR_WHITE)
         
-        # 설명 (줄바꿈 처리)
         desc = main_badge['desc']
-        # 한 줄에 약 28자 정도
         lines = [desc[i:i+28] for i in range(0, len(desc), 28)]
-        desc_formatted = "\n".join(lines)
-        
-        draw.text((text_x, text_y + 90), desc_formatted, font=font_badge_main_desc, fill=COLOR_GRAY, spacing=15)
+        draw.text((text_x, text_y + 90), "\n".join(lines), font=font_badge_main_desc, fill=COLOR_GRAY, spacing=15)
 
 
     # =================================================================
-    # [4] 하단 좌측: 서브 뱃지 (2x2 Grid)
+    # [5] 서브 뱃지
     # =================================================================
-    
-    sub_badges = badges[1:5] # 2~5순위
-    
-    # 2x2 그리드 설정
-    # 박스 1 시작점: (140, 1150)
-    grid_start_x = 115
-    grid_start_y = 1440
-    
-    # 박스 크기 및 간격 (배경 프레임 기준)
-    box_w = 360
-    box_h = 360
-    gap_x = 50  # 좌우 간격
-    gap_y = 50  # 상하 간격
+    sub_badges = badges[1:5]
+    grid_start_x = 125
+    grid_start_y = 1407
+    box_w, box_h = 360, 360
+    gap_x, gap_y = 42, 45
 
     for i in range(4):
-        row = i // 2
-        col = i % 2
-        
-        # 현재 박스의 좌상단 좌표
-        bx = grid_start_x + (col * (box_w + gap_x))
-        by = grid_start_y + (row * (box_h + gap_y))
+        bx = grid_start_x + ((i % 2) * (box_w + gap_x))
+        by = grid_start_y + ((i // 2) * (box_h + gap_y))
         
         if i < len(sub_badges):
             badge = sub_badges[i]
-            
-            # (1) 이미지 (박스 중앙보다 약간 위)
             b_path = badge.get('image', '')
             b_abs_path = os.path.join(base_dir, b_path) if b_path else ""
+            icon_size = 346
             
-            icon_size = 280
             if os.path.exists(b_abs_path):
                 try:
                     b_img = Image.open(b_abs_path).convert("RGBA")
                     b_img = b_img.resize((icon_size, icon_size))
-                    
-                    # 박스 내 중앙 정렬
                     paste_x = bx + (box_w - icon_size) // 2
-                    paste_y = by + 50 # 상단 여백
-                    card.paste(b_img, (paste_x, paste_y), b_img)
-                except:
-                    pass
-            
-            # (2) 뱃지 이름 (이미지 아래 중앙)
-            b_name = badge['name']
-            
-            # 텍스트 중앙 정렬 계산
-            name_bbox = draw.textbbox((0, 0), b_name, font=font_badge_sub)
-            name_w = name_bbox[2] - name_bbox[0]
-            
-            # 이름이 박스보다 넓으면 자르기 (간단 처리)
-            # if name_w > box_w - 20: ...
-            
-            draw.text((bx + (box_w - name_w) // 2, by + 280), b_name, font=font_badge_sub, fill=COLOR_WHITE)
+                    paste_y = by + 50
+                    card.paste(b_img, (int(paste_x), int(paste_y)), b_img)
+                except: pass
 
 
     # =================================================================
-    # [5] 하단 우측: 스탯 리스트 (5 Rows)
+    # [6] 스탯 리스트
     # =================================================================
-    
-    # 주요 스탯 5개
     stats_data = [
         ("K/D Ratio", f"{metrics['kd']}"),
         ("Win Rate", f"{metrics['wr_pub']}%"),
@@ -217,28 +229,19 @@ def create_player_card(nickname, roblox_avatar_url, metrics, badges, season_scor
         ("Playtime", f"{metrics.get('playtime', 0):.1f}h")
     ]
 
-    # 리스트 영역 시작점
-    list_x_start = 980
-    list_y_start = 1500
-    row_height = 155 # 각 줄의 높이 (배경 프레임 간격)
+    list_x = 980
+    list_y = 1500
+    row_h = 155
 
     for idx, (label, val) in enumerate(stats_data):
-        ly = list_y_start + (idx * row_height)
+        ly = list_y + (idx * row_h)
+        draw.text((list_x + 40, ly), label, font=font_stat_label, fill=COLOR_GRAY)
         
-        # (1) 라벨 (왼쪽 정렬)
-        # 아이콘이 들어갈 공간(약 100px) 띄우고 텍스트 시작
-        draw.text((list_x_start + 40, ly), label, font=font_stat_label, fill=COLOR_GRAY)
-        
-        # (2) 값 (오른쪽 정렬)
-        # 영역 끝(x=1780) 기준으로 텍스트 너비만큼 빼서 x좌표 계산
         val_bbox = draw.textbbox((0, 0), val, font=font_stat_val)
         val_w = val_bbox[2] - val_bbox[0]
-        val_h = val_bbox[3] - val_bbox[1]
-        
-        # y좌표 미세 조정 (라벨과 베이스라인 맞추기)
         draw.text((1650 - val_w, ly - 5), val, font=font_stat_val, fill=COLOR_WHITE)
 
-    # 푸터 (우측 하단 구석)
+    # 푸터
     draw.text((W-400, H-80), "RIVALS RECAP.GG", font=font_stat_label, fill=(150, 150, 150))
 
     return card

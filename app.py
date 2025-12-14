@@ -16,85 +16,143 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 세션 상태 초기화
 if 'data' not in st.session_state: st.session_state['data'] = None
-if 'weapons' not in st.session_state: st.session_state['weapons'] = []
+if 'weapon_files' not in st.session_state: st.session_state['weapon_files'] = [] # 무기 파일 리스트
+if 'final_weapons_data' not in st.session_state: st.session_state['final_weapons_data'] = []
 if 'nickname' not in st.session_state: st.session_state['nickname'] = ""
+if 'level' not in st.session_state: st.session_state['level'] = 1
 if 'roblox_profile' not in st.session_state: st.session_state['roblox_profile'] = None
 if 'generated_card' not in st.session_state: st.session_state['generated_card'] = None
 
 with st.sidebar:
-    st.header("⚙️ Recap 설정")
-    user_api_key = st.text_input("API Key (옵션)", type="password")
+    st.header("🏆 Season 1 Recap")
+    st.info("API 키는 내부 설정값을 사용합니다.")
 
 st.markdown("<h1 style='text-align: center;'>🏆 RIVALS SEASON 1 RECAP</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>당신의 시즌 1 기록을 화려한 카드로 만들어 자랑하세요!</p>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["1️⃣ 데이터 입력 & 분석", "2️⃣ 나만의 플레이어 카드"])
+tab1, tab2 = st.tabs(["1️⃣ 데이터 입력 (사진 업로드)", "2️⃣ 리캡 카드 확인"])
 
 # ==========================================
 # 1. 데이터 입력 (Input)
 # ==========================================
 with tab1:
-    col1, col2 = st.columns([1, 1])
+    col_input, col_preview = st.columns([1.5, 1])
     
-    with col1:
-        st.info("닉네임 입력 -> 스크린샷 업로드 -> 무기 정보 추가(선택) -> 분석 시작")
-        nick_input = st.text_input("Roblox 닉네임", value=st.session_state['nickname'])
-        if nick_input: st.session_state['nickname'] = nick_input
-        
-        uploaded_files = st.file_uploader("스탯 스크린샷 (다중 선택)", accept_multiple_files=True, type=['jpg', 'png'])
-        
-        with st.expander("🔫 무기 데이터 추가 (중요: 웨폰마스터 칭호)", expanded=False):
-            c_w1, c_w2, c_w3 = st.columns([2, 1, 1])
-            w_name = c_w1.selectbox("무기", ["Sniper", "Assault Rifle", "Shotgun", "Pistol", "Katana", "Bow", "Flamethrower", "Ice Gun"])
-            w_kills = c_w2.number_input("킬", step=10)
-            w_hours = c_w3.number_input("시간(h)", step=0.5)
-            if st.button("무기 추가"):
-                st.session_state['weapons'].append({"name": w_name, "kills": w_kills, "hours": w_hours})
-                st.success(f"{w_name} 추가됨")
-        
-        if st.session_state['weapons']:
-            st.caption(f"등록된 무기: {len(st.session_state['weapons'])}개")
+    with col_input:
+        st.subheader("1. 플레이어 정보")
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            nick_input = st.text_input("닉네임", value=st.session_state['nickname'])
+            if nick_input: st.session_state['nickname'] = nick_input
+        with c2:
+            st.session_state['level'] = st.number_input("레벨", min_value=1, value=st.session_state['level'])
 
-        if st.button("🚀 분석 시작 (Recap 생성)", type="primary"):
+        st.markdown("---")
+        st.subheader("2. 스탯 사진 업로드")
+        
+        # (1) 랭크 스탯
+        st.markdown("#### ① 랭크 스탯 (Season 1)")
+        rank_file = st.file_uploader("랭크 사진 1장 (Final ELO 포함)", type=['jpg', 'png'], key="rank_up")
+        
+        # (2) 전체 스탯
+        st.markdown("#### ② 전체 스탯 (Statistics)")
+        general_files = st.file_uploader("전체 통계 사진 (2~3장)", type=['jpg', 'png'], accept_multiple_files=True, key="gen_up")
+        
+        # (3) 무기 스탯
+        st.markdown("#### ③ 무기 스탯 추가 (선택)")
+        with st.expander("🔫 무기 사진 추가하기", expanded=True):
+            w_col1, w_col2 = st.columns([2, 3])
+            w_name_sel = w_col1.selectbox("무기 선택", ["Sniper", "Assault Rifle", "Shotgun", "Pistol", "Katana", "Bow", "Flamethrower", "Ice Gun", "Scythe", "Minigun"])
+            w_file = w_col2.file_uploader("해당 무기 스탯 사진", type=['jpg', 'png'], key="w_up")
+            
+            if st.button("➕ 무기 목록에 추가"):
+                if w_file:
+                    # 세션에 저장 (튜플 형태: 이름, 파일객체)
+                    st.session_state['weapon_files'].append({"name": w_name_sel, "file": w_file})
+                    st.success(f"{w_name_sel} 사진 추가됨!")
+                else:
+                    st.error("사진을 선택해주세요.")
+
+        # 추가된 무기 목록 표시
+        if st.session_state['weapon_files']:
+            st.write(f"📋 **추가된 무기 ({len(st.session_state['weapon_files'])}개):**")
+            for idx, item in enumerate(st.session_state['weapon_files']):
+                st.caption(f"{idx+1}. {item['name']}")
+
+        st.markdown("---")
+        
+        # (4) 분석 버튼
+        if st.button("🚀 전체 분석 시작 (Analyze)", type="primary"):
             if not st.session_state['nickname']:
                 st.error("닉네임을 입력해주세요!")
-            elif not uploaded_files:
-                st.error("스크린샷을 업로드해주세요!")
+            elif not rank_file and not general_files:
+                st.error("랭크 사진 또는 전체 스탯 사진을 최소 1장은 올려주세요.")
             else:
-                with st.spinner("AI가 시즌 데이터를 분석 중입니다..."):
-                    result = api_client.get_gemini_response(uploaded_files, user_api_key)
-                    if result:
-                        st.session_state['data'] = result
-                        # 데이터에 닉네임이 없거나 비어있으면 수동 입력값 사용
-                        if not st.session_state['data'].get('nickname'):
-                            st.session_state['data']['nickname'] = st.session_state['nickname']
-                        
-                        profile = roblox_api.get_roblox_profile(st.session_state['nickname'])
-                        st.session_state['roblox_profile'] = profile
-                        
-                        st.success("분석 완료! '나만의 플레이어 카드' 탭으로 이동하세요.")
-                        st.balloons()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # 1. 메인 스탯 분석
+                status_text.text("📊 메인 스탯(랭크/일반) 분석 중...")
+                main_data = api_client.get_main_stats(rank_file, general_files)
+                progress_bar.progress(50)
+                
+                # 2. 무기 스탯 분석
+                weapons_data = []
+                if st.session_state['weapon_files']:
+                    total_w = len(st.session_state['weapon_files'])
+                    for i, w_item in enumerate(st.session_state['weapon_files']):
+                        status_text.text(f"🔫 무기 분석 중: {w_item['name']} ({i+1}/{total_w})")
+                        w_res = api_client.get_weapon_stats(w_item['name'], w_item['file'])
+                        if w_res:
+                            weapons_data.append(w_res)
+                        progress_bar.progress(50 + int(40 * (i+1)/total_w))
+                
+                progress_bar.progress(90)
+                
+                # 3. 데이터 통합 및 저장
+                if main_data:
+                    # 닉네임 강제 적용
+                    main_data['nickname'] = st.session_state['nickname']
+                    st.session_state['data'] = main_data
+                    st.session_state['final_weapons_data'] = weapons_data
+                    
+                    # 프로필 로드
+                    status_text.text("👤 로블록스 프로필 불러오는 중...")
+                    profile = roblox_api.get_roblox_profile(st.session_state['nickname'])
+                    st.session_state['roblox_profile'] = profile
+                    
+                    progress_bar.progress(100)
+                    st.success("✅ 분석 완료! 오른쪽(또는 아래) 탭에서 카드를 확인하세요.")
+                    st.balloons()
+                else:
+                    st.error("메인 스탯 분석에 실패했습니다. 사진을 확인해주세요.")
 
-    with col2:
-        st.write("📊 **분석 미리보기**")
+    with col_preview:
         if st.session_state['data']:
+            st.write("📊 **분석 결과 요약**")
             data = st.session_state['data']
-            metrics = logic.calculate_basic_metrics(data, st.session_state['weapons'])
-            season_score = logic.calculate_season_score(data, metrics)
-            badges = logic.get_acquired_badges(data, metrics)
+            weapons = st.session_state['final_weapons_data']
             
-            st.metric("Season Score", f"{season_score:,} pts")
+            metrics = logic.calculate_basic_metrics(data, weapons)
             
-            # [수정] Playtime 키 변경 반영
-            playtime = data.get('playtime', 0)
-            st.write(f"**Playtime:** {playtime:.1f}h")
+            # 랭크 정보 표시
+            final_elo = metrics.get('final_elo', 0)
+            tier_img = logic.get_tier_image_name(final_elo)
             
-            st.write(f"**획득 뱃지:** {len(badges)}개")
-            for b in badges[:3]:
-                st.caption(f"🏅 {b['name']} (점수: {int(b.get('priority', 0))})")
-        else:
-            st.markdown("데이터가 없습니다.")
+            c1, c2 = st.columns(2)
+            c1.metric("Final ELO", f"{final_elo:,}")
+            c1.caption(f"Tier Image: {tier_img}")
+            
+            c2.metric("K/D Ratio", metrics['kd'])
+            c2.metric("Playtime", f"{metrics['playtime']:.1f}h")
+            
+            st.markdown("---")
+            if weapons:
+                st.write("🔫 **무기 분석 결과**")
+                w_insights = logic.calculate_weapon_insights(weapons)
+                for w in w_insights:
+                    st.caption(f"**{w['name']}**: {w['kph']} KPH ({w['tier']})")
 
 # ==========================================
 # 2. 플레이어 카드 (Output)
@@ -104,15 +162,30 @@ with tab2:
         st.subheader("✨ Your Season 1 Player Card")
         
         data = st.session_state['data']
-        metrics = logic.calculate_basic_metrics(data, st.session_state['weapons'])
-        season_score = logic.calculate_season_score(data, metrics)
+        weapons = st.session_state['final_weapons_data']
+        
+        metrics = logic.calculate_basic_metrics(data, weapons)
+        # 점수는 ELO 사용
+        score = metrics.get('final_elo', 0) 
+        if score == 0: score = logic.calculate_season_score(data, metrics)
+            
         badges = logic.get_acquired_badges(data, metrics)
         
         avatar_url = st.session_state['roblox_profile']['avatar_url']
         nickname = st.session_state['nickname']
+        level = st.session_state['level']
+        tier_image_name = logic.get_tier_image_name(score)
         
         if st.button("🎨 카드 생성하기 (새로고침)", key="gen_btn"):
-            card_img = card_generator.create_player_card(nickname, avatar_url, metrics, badges, season_score)
+            card_img = card_generator.create_player_card(
+                nickname=nickname, 
+                roblox_avatar_url=avatar_url, 
+                metrics=metrics, 
+                badges=badges, 
+                score=score,
+                level=level,
+                tier_image_name=tier_image_name
+            )
             st.session_state['generated_card'] = card_img
         
         if st.session_state['generated_card']:
@@ -128,13 +201,5 @@ with tab2:
                 file_name=f"{nickname}_season1_recap.png",
                 mime="image/png"
             )
-            
-        st.markdown("---")
-        st.subheader("🏅 획득한 칭호 목록")
-        cols = st.columns(3)
-        for idx, badge in enumerate(badges):
-            with cols[idx % 3]:
-                st.info(f"**{badge['name']}**\n\n{badge['desc']}")
-
     else:
-        st.warning("먼저 '데이터 입력' 탭에서 분석을 완료해주세요.")    
+        st.info("데이터 입력 탭에서 분석을 먼저 진행해주세요.")

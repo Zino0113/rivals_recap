@@ -1,39 +1,45 @@
 # logic.py
-# 데이터 계산 및 비즈니스 로직을 담당하는 모듈
 import badges_data
 
 def calculate_basic_metrics(data, weapons=[]):
-    """기본 승률, K/D, 갭 차이 및 뱃지용 파생 지표 계산"""
+    """데이터 구조 변경 반영 (general_stats, season_1_rank_stats)"""
     
-    kills = data.get('eliminations', 0)
-    deaths = data.get('deaths', 0)
+    gen = data.get('general_stats', {})
+    rank = data.get('season_1_rank_stats', {})
+    
+    kills = gen.get('eliminations', 0)
+    deaths = gen.get('deaths', 0)
     kd = kills / deaths if deaths > 0 else kills
 
-    # 일반전 (Duels)
-    d_wins = data.get('duels_played', {}).get('wins', 0)
-    d_losses = data.get('duels_played', {}).get('losses', 0)
+    # 일반전
+    d_wins = gen.get('duels_played', {}).get('wins', 0)
+    d_losses = gen.get('duels_played', {}).get('losses', 0)
     total_duels = d_wins + d_losses
     wr_pub = (d_wins / total_duels * 100) if total_duels > 0 else 0.0
 
-    # 랭크전 (Ranked) - [수정됨] 키 경로 변경
-    r_wins = data.get('ranked_duels_played', {}).get('ranked_wins', 0)
-    r_losses = data.get('ranked_duels_played', {}).get('ranked_losses', 0)
-    total_ranked = r_wins + r_losses
-    wr_rank = (r_wins / total_ranked * 100) if total_ranked > 0 else 0.0
+    # 랭크전 (Rank Stats 사진 기반)
+    r_wins = rank.get('duels_won', 0)
+    r_losses = rank.get('duels_lost', 0)
+    # total_ranked = r_wins + r_losses 
+    # API가 total played를 주면 그거 쓰고 없으면 합산
+    total_ranked = rank.get('duels_played', r_wins + r_losses)
+    wr_rank = rank.get('win_rate', 0.0)
+    if wr_rank == 0 and total_ranked > 0:
+        wr_rank = (r_wins / total_ranked * 100)
 
     gap = wr_rank - wr_pub
 
-    # [뱃지용 추가 지표 계산]
-    # 1. 서든데스 통계
-    sd_wins = data.get('duels_played', {}).get('sudden_death_wins', 0)
-    sd_losses = data.get('duels_played', {}).get('sudden_death_losses', 0)
+    # 뱃지용 추가 지표
+    sd_wins = gen.get('duels_played', {}).get('sudden_death_wins', 0)
+    sd_losses = gen.get('duels_played', {}).get('sudden_death_losses', 0)
     sd_total = sd_wins + sd_losses
     sd_win_rate = (sd_wins / sd_total * 100) if sd_total > 0 else 0.0
 
-    # 2. 무기 마스터리 (A등급 이상 개수) - KPH 70 이상
     weapon_mastery_a_count = 0
     for w in weapons:
-        kph = (w['kills'] / w['hours']) if w['hours'] > 0 else 0
+        # 무기별 win %가 60% 이상이면 A급으로 간주 (또는 킬수 등 기준 변경 가능)
+        # 기존 로직: KPH 70 이상
+        kph = (w.get('eliminations', 0) / w.get('playtime_hours', 1)) if w.get('playtime_hours', 0) > 0 else 0
         if kph >= 70:
             weapon_mastery_a_count += 1
 
@@ -45,68 +51,79 @@ def calculate_basic_metrics(data, weapons=[]):
         "total_duels": total_duels,
         "total_ranked": total_ranked,
         "total_kills": kills,
-        "playtime": data.get('playtime', 0), # [수정됨] playtime_hours -> playtime
-        
-        # 뱃지 전용 파생 변수
+        "playtime": gen.get('playtime_hours', 0),
         "sd_total": sd_total,
         "sd_win_rate": sd_win_rate,
         "weapon_mastery_a_count": weapon_mastery_a_count,
+        "final_elo": rank.get('final_elo', 0), # 점수
         "weapons": weapons
     }
 
 def calculate_season_score(data, metrics):
+    # 점수는 Final ELO를 우선 사용
+    if metrics.get('final_elo', 0) > 0:
+        return metrics['final_elo']
+    
+    # ELO가 없으면 계산식 사용 (Fallback)
+    gen = data.get('general_stats', {})
     score = 0
-    score += data.get('eliminations', 0) * 1
-    score += data.get('duels_played', {}).get('wins', 0) * 10
-    score += int(data.get('playtime', 0) * 50) # [수정됨]
-    score += data.get('duels_played', {}).get('flawless_wins', 0) * 20
-    score += data.get('ranked_duels_played', {}).get('ranked_wins', 0) * 30 # [수정됨]
+    score += gen.get('eliminations', 0) * 1
+    score += gen.get('duels_played', {}).get('wins', 0) * 10
+    score += int(gen.get('playtime_hours', 0) * 50)
+    score += gen.get('duels_played', {}).get('flawless_wins', 0) * 20
     return score
 
+def get_tier_image_name(score):
+    if score < 600: return "b3.webp"
+    elif score < 1200: return "s3.webp"
+    elif score < 1800: return "g3.webp"
+    elif score < 2400: return "p3.webp"
+    elif score < 3000: return "d3.webp"
+    elif score < 3600: return "o3.webp"
+    elif score < 4200: return "neme.webp"
+    else: return "arch.webp"
+
 def get_acquired_badges(data, metrics):
-    """조건을 만족하는 뱃지를 찾아내고, 우선순위에 따라 정렬하여 반환"""
     acquired = []
+    # 데이터 구조 맞추기 (뱃지 로직이 기존 구조를 따를 수 있음)
+    # badges_data.py의 lambda 함수들이 data['general_stats']를 참조하도록 수정하거나
+    # 여기서 data를 flatten해서 넘겨줄 수도 있음.
+    # 가장 깔끔한 건 여기서 data 구조를 badges_data가 좋아하는 형태로 래핑하는 것.
+    
+    # 래핑 데이터 생성 (기존 badges_data 호환용)
+    flat_data = data.get('general_stats', {}).copy()
+    # 루트 레벨에 필요한 키들이 있다면 추가
     
     for badge in badges_data.BADGE_LIST:
         try:
-            # 1. 조건 확인
-            if badge['condition'](data, metrics):
-                
+            condition = badge['condition']
+            if callable(condition):
+                # flat_data를 넘겨서 기존 로직 호환성 유지
+                is_valid = condition(flat_data, metrics)
+            else:
+                is_valid = bool(condition)
+            
+            if is_valid:
                 badge_info = badge.copy()
-
-                # 2. 동적 이름(name) 생성
-                if 'name_func' in badge:
-                    badge_info['name'] = badge['name_func'](data, metrics)
-
-                # 3. 동적 이미지(image) 생성
-                if 'image_func' in badge:
-                    badge_info['image'] = badge['image_func'](data, metrics)
-
-                # 4. 동적 설명(desc) 생성
-                if 'desc_func' in badge:
-                    badge_info['desc'] = badge['desc_func'](data, metrics)
+                if 'name_func' in badge: badge_info['name'] = badge['name_func'](flat_data, metrics)
+                if 'image_func' in badge: badge_info['image'] = badge['image_func'](flat_data, metrics)
+                if 'desc_func' in badge: badge_info['desc'] = badge['desc_func'](flat_data, metrics)
                 
-                # 5. 동적 우선순위(priority) 계산
-                if 'priority_func' in badge:
-                    badge_info['priority'] = badge['priority_func'](data, metrics)
-                else:
-                    badge_info['priority'] = badge.get('priority', 0)
+                if 'priority_func' in badge: badge_info['priority'] = badge['priority_func'](flat_data, metrics)
+                else: badge_info['priority'] = badge.get('priority', 0)
                 
                 acquired.append(badge_info)
         except Exception as e:
-            # 에러 발생 시 콘솔에 로그만 남기고 다음 뱃지로 진행 (앱 멈춤 방지)
-            print(f"뱃지 오류 ({badge.get('name', 'Unknown')}): {e}")
             continue
     
-    # 우선순위가 높은 순서대로 정렬 (내림차순)
     acquired.sort(key=lambda x: x['priority'], reverse=True)
     return acquired
 
 def calculate_weapon_insights(weapons):
     insights = []
     for w in weapons:
-        hours = w['hours']
-        kills = w['kills']
+        hours = w.get('playtime_hours', 0)
+        kills = w.get('eliminations', 0)
         kph = (kills / hours) if hours > 0 else 0
         
         tier = "B"
@@ -115,7 +132,7 @@ def calculate_weapon_insights(weapons):
         elif kph >= 70: tier = "A"
         
         insights.append({
-            "name": w['name'],
+            "name": w.get('weapon_name', 'Unknown'),
             "hours": hours,
             "kills": kills,
             "kph": round(kph, 1),

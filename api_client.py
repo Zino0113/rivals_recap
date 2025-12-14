@@ -5,7 +5,7 @@ import prompt_data
 import streamlit as st
 
 # [설정] API 키 하드코딩 (배포 시 주의)
-HARDCODED_API_KEY = "AIzaSyCsUaZnEu0yQZxU69WiH4xri-oEZ-uUPX4"
+HARDCODED_API_KEY = "AIzaSyCjnuFL2p50jF0BQ7TgYCf2euweFWgss_Y"
 
 def _configure_genai():
     genai.configure(api_key=HARDCODED_API_KEY)
